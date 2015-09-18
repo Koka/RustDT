@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015, 2015 Bruno Medeiros and other Contributors.
+ * Copyright (c) 2015 Bruno Medeiros and other Contributors.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,6 +10,7 @@
  *******************************************************************************/
 package com.github.rustdt.tooling.lexer;
 
+import melnorme.lang.tooling.parser.lexer.CharacterReaderWrapper;
 import melnorme.lang.tooling.parser.lexer.CommonLexingRule;
 import melnorme.lang.tooling.parser.lexer.ICharacterReader;
 import melnorme.lang.tooling.parser.lexer.ILexingRule;
@@ -18,90 +19,64 @@ public class RustNumberLexingRule extends CommonLexingRule implements ILexingRul
 
 	@Override
 	public boolean evaluate(ICharacterReader reader) {
-
-		if (!checkPrefix(reader)) {
-			return false;
+		reader = new CharacterReaderWrapper(reader);
+		
+		boolean sucess = doEvaluate(reader);
+		if(!sucess) {
+			reader.reset();
 		}
-
-		boolean hasOctPrefix = false;
-		boolean hasHexPrefix = false;
-		boolean hasBinPrefix = false;
-
-		hasOctPrefix = consumeOctPrefix(reader);
-		if (!hasOctPrefix) {
-			hasHexPrefix = consumeHexPrefix(reader);
-			if (!hasHexPrefix) {
-				hasBinPrefix = consumeBinPrefix(reader);
-			}
-		}
-
-		boolean hasPrefix = hasOctPrefix || hasHexPrefix || hasBinPrefix;
-		while (hasPrefix && reader.consume('_')) {
-			// JUST SKIP THEM
-		}
-
+		return sucess;
+	}
+	
+	// See: https://doc.rust-lang.org/nightly/grammar.html#number-literals
+	protected boolean doEvaluate(ICharacterReader reader) {
+		
 		reader.consume('-');
-
-		int radix = hasHexPrefix ? 16 : (hasOctPrefix ? 8 : (hasBinPrefix ? 2 : 10));
-
-		if (!consumeDigit(reader, radix)) {
-			return false;
-		}
-
-		while (consumeDigit(reader, radix) || reader.consume('_')) {
-			// JUST SKIP THEM
-		}
-
-		if (!consumeIntSuffix(reader)) {
-			if (reader.consume('.')) {
-				if (reader.lookahead() == '.') {
-					reader.unread();
-				} else {
-					if (hasPrefix) {
-						return false;
-					}
-					
-					if (!consumeDigit(reader, radix)) {
-						return false;
-					}
-					while (consumeDigit(reader, radix) || reader.consume('_')) {
-						// JUST SKIP THEM
-					}
-					consumeFloatSuffix(reader);
-				}
+		
+		int radix = 10;
+		
+		if(reader.consume('0')) {
+			if(reader.consume('b')) {
+				radix = 2;
+			} 
+			else if(reader.consume('o')) {
+				radix = 8;
+			}
+			else if(reader.consume('x')) {
+				radix = 16;
+			}
+		} else {
+			if(!consumeDigit(reader, radix)) {
+				return false;
 			}
 		}
-
-		int postfix = reader.lookahead();
-		if (Character.isAlphabetic(postfix)) {
-			return false;
+		
+		consumeDigits(reader, radix);
+		
+		if (consumeIntSuffix(reader)) {
+			return true;
 		}
-
+		
+		boolean hasPrefix = radix != 10;
+		
+		if (!hasPrefix && reader.consume('.')) {
+			if (reader.lookahead() == '.') {
+				reader.unread();
+			} else {
+				
+				consumeDigits(reader, radix);
+				// TODO: float exponent
+				consumeFloatSuffix(reader);
+			}
+		}
+		
 		return true;
 	}
 
-	private static boolean checkPrefix(ICharacterReader reader) {
-		int prefix;
-		int behind = 0;
-		while (true) {
-			prefix = reader.lookahead();
-			if (Character.isDigit(prefix)) {
-				reader.unread();
-				behind++;
-				continue;
-			}
-			break;
+	protected void consumeDigits(ICharacterReader reader, int radix) {
+		while (consumeDigit(reader, radix) || reader.consume('_')) {
+			// JUST SKIP THEM
 		}
-
-		for (int i = 0; i < behind; i++) {
-			reader.read();
-		}
-
-		if (Character.isAlphabetic(prefix) || '_' == prefix) {
-			return false;
-		}
-
-		return true;
 	}
 
 	private static boolean consumeDigit(ICharacterReader reader, int radix) {
@@ -115,39 +90,6 @@ public class RustNumberLexingRule extends CommonLexingRule implements ILexingRul
 		if (hex || dec || oct || bin) {
 			reader.read();
 			return true;
-		}
-		return false;
-	}
-
-	private static boolean consumeHexPrefix(ICharacterReader reader) {
-		if (reader.consume('0')) {
-			if (reader.consume('x')) {
-				return true;
-			} else {
-				reader.unread();
-			}
-		}
-		return false;
-	}
-
-	private static boolean consumeOctPrefix(ICharacterReader reader) {
-		if (reader.consume('0')) {
-			if (reader.consume('o')) {
-				return true;
-			} else {
-				reader.unread();
-			}
-		}
-		return false;
-	}
-
-	private static boolean consumeBinPrefix(ICharacterReader reader) {
-		if (reader.consume('0')) {
-			if (reader.consume('b')) {
-				return true;
-			} else {
-				reader.unread();
-			}
 		}
 		return false;
 	}

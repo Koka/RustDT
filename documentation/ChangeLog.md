@@ -1,6 +1,9 @@
 ## RustDT release ChangeLog
 
 ### (NextVersion)
+ * Added editor number syntax highlighting. (#55)
+ * Fixed: Unindent (Shift-Tab) broken, does nothing after empty lines in selection.
+ 
 
 ### 0.3.0
  * Added support for Build Targets, based on Cargo build targets.
